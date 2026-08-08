@@ -145,7 +145,7 @@ def make_waterfall_figure(shap_values, feature_values, feature_names, base_value
                     va="center", fontsize=10.5, color=color, zorder=4)
 
     ylabels = [
-        f"{fmt_feature_value(name, value)} = {FEATURE_LABELS.get(name, name)}"
+        rf"$\mathit{{{fmt_feature_value(name, value)}}}$ = {name}"
         for name, value in zip(names, data)
     ]
     ax.set_yticks(y)
@@ -154,9 +154,9 @@ def make_waterfall_figure(shap_values, feature_values, feature_names, base_value
 
     ax.axvline(base_value, color="#B9BFC3", linestyle="--", linewidth=0.9, zorder=1)
     ax.axvline(prediction, color="#222222", linestyle="--", linewidth=1.0, zorder=1)
-    ax.text(prediction, -0.83, f"预测值 f(x) = {prediction:.3f}", ha="center", va="bottom",
+    ax.text(prediction, -0.83, rf"$f(x)$ = {prediction:.3f}", ha="center", va="bottom",
             fontsize=12.5, fontweight="bold")
-    ax.text(base_value, len(vals) - 0.05, f"基线值 E[f(X)] = {base_value:.3f}", ha="center",
+    ax.text(base_value, len(vals) - 0.05, rf"$E[f(X)]$ = {base_value:.3f}", ha="center",
             va="top", fontsize=11.5, color="#8C8C8C")
 
     ax.set_xlim(x_min - margin, x_max + margin)
@@ -167,7 +167,7 @@ def make_waterfall_figure(shap_values, feature_values, feature_names, base_value
     for spine in ["top", "right", "left"]:
         ax.spines[spine].set_visible(False)
     ax.spines["bottom"].set_linewidth(1.0)
-    ax.set_xlabel("模型输出（ACL 峰值力，BW）", fontsize=11)
+    ax.set_xlabel("Model output (Peak ACL force, BW)", fontsize=11)
     fig.tight_layout()
     return fig
 
@@ -218,24 +218,6 @@ def recolor_force_plot(fig):
                     obj.set_edgecolor(new_c)
             except Exception:
                 pass
-    # 将 SHAP 力图中的固定英文提示替换为中文
-    text_replacements = {
-        "base value": "基线值",
-        "higher": "升高",
-        "lower": "降低",
-        "features": "特征",
-        "feature": "特征",
-        "output value": "输出值"
-    }
-    for text_obj in ax.texts:
-        try:
-            current_text = text_obj.get_text()
-            for en_text, zh_text in text_replacements.items():
-                current_text = current_text.replace(en_text, zh_text)
-            text_obj.set_text(current_text)
-        except Exception:
-            pass
-
     return fig
 
 
@@ -336,6 +318,37 @@ with col_left:
 
     prediction = float(pipeline.predict(input_data)[0])
 
+    # ========================================================
+    # 个体 ACL 负荷预测结果与高/低负荷判定
+    # ========================================================
+    if np.isfinite(threshold):
+        is_high_load = prediction >= threshold
+        load_label = "高负荷" if is_high_load else "低负荷"
+        load_color = POS_COLOR if is_high_load else NEG_COLOR
+        threshold_text = (
+            f"高负荷参考阈值：{threshold:.3f} BW "
+            f"（训练数据第 {threshold_percentile} 百分位）"
+        )
+    else:
+        load_label = "未判定"
+        load_color = TITLE_COLOR
+        threshold_text = "模型文件中未设置高负荷参考阈值"
+
+    st.markdown(f"""
+    <div class="result-card">
+        <div class="label-text">预测 ACL 峰值负荷</div>
+        <div class="result-row">
+            <span class="value-text">{prediction:.3f}</span>
+            <span class="unit-text">BW</span>
+            <span class="status-text" style="color:{load_color};">{load_label}</span>
+        </div>
+        <div class="small-note">
+            {threshold_text}<br>
+            判定规则：预测值 ≥ 阈值为高负荷，预测值 &lt; 阈值为低负荷。
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 with col_right:
     st.markdown("### 🔍 个体模型解释")
 
@@ -354,7 +367,7 @@ with col_right:
     # ========================================================
     # 瀑布图与力图在同一页面显示
     # ========================================================
-    st.markdown("#### SHAP 瀑布图")
+    st.markdown("#### SHAP 瀑布图（英文图示）")
     wf_fig = make_waterfall_figure(
         shap_values=shap_row,
         feature_values=processed_input.iloc[0].values,
@@ -366,10 +379,10 @@ with col_right:
         "瀑布图：深红色表示该特征使预测 ACL 负荷升高，青绿色表示该特征使预测 ACL 负荷降低。"
     )
 
-    st.markdown("#### SHAP 力图")
+    st.markdown("#### SHAP 力图（英文图示）")
     force_features = pd.Series(
         processed_input.iloc[0].round(3).values,
-        index=[FEATURE_LABELS.get(name, name) for name in processed_feature_names]
+        index=processed_feature_names
     )
     shap_fig = shap.force_plot(
         current_base, shap_row, force_features,
