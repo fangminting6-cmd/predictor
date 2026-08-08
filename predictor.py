@@ -40,16 +40,16 @@ matplotlib.rcParams.update({
 })
 
 FEATURE_LABELS = {
-    "HFA": "髋关节屈曲角（HFA）",
-    "HRA": "髋关节旋转角（HRA）",
-    "HAA": "髋关节内收角（HAA）",
-    "KFA": "膝关节屈曲角（KFA）",
-    "ITR": "胫骨内旋角（ITR）",
-    "KVA": "膝关节内/外翻角（KVA）",
-    "ADF": "踝关节背屈角（ADF）",
-    "FPA": "足前进角（FPA）",
-    "TFA": "躯干屈曲角（TFA）",
-    "H/Q": "腘绳肌/股四头肌比值（H/Q）"
+    "HFA": "髋屈曲角",
+    "HRA": "髋内旋角",
+    "HAA": "髋内收角",
+    "KFA": "膝屈曲角",
+    "ITR": "胫骨内旋角",
+    "KVA": "膝关节外翻角）",
+    "ADF": "踝背屈角",
+    "FPA": "足外展角",
+    "TFA": "躯干前倾角",
+    "H/Q": "腘绳肌/股四头肌比值）"
 }
 
 FEATURE_UNITS = {
@@ -265,7 +265,7 @@ baseline = scalar_base_value(bundle.get("base_value", explainer.expected_value))
 threshold = float(bundle.get("high_load_threshold", np.nan))
 threshold_percentile = bundle.get("threshold_percentile", 75)
 
-col_left, col_right = st.columns([0.95, 1.20], gap="large")
+col_left, col_right = st.columns([1.0, 1.0], gap="large")
 
 with col_left:
     st.markdown("### 📋 个体生物力学参数输入")
@@ -367,7 +367,7 @@ with col_right:
     # ========================================================
     # 瀑布图与力图在同一页面显示
     # ========================================================
-    st.markdown("#### SHAP 瀑布图（英文图示）")
+    st.markdown("#### SHAP 瀑布图")
     wf_fig = make_waterfall_figure(
         shap_values=shap_row,
         feature_values=processed_input.iloc[0].values,
@@ -379,7 +379,7 @@ with col_right:
         "瀑布图：深红色表示该特征使预测 ACL 负荷升高，青绿色表示该特征使预测 ACL 负荷降低。"
     )
 
-    st.markdown("#### SHAP 力图（英文图示）")
+    st.markdown("#### SHAP 力图")
     force_features = pd.Series(
         processed_input.iloc[0].round(3).values,
         index=processed_feature_names
