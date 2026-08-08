@@ -10,43 +10,51 @@ from matplotlib.patches import FancyArrow
 from sklearn.pipeline import Pipeline
 
 # ============================================================
-# 0. Page configuration
+# 0. 页面配置
 # ============================================================
 st.set_page_config(
-    page_title="Individual ACL Loading Prediction",
+    page_title="个体ACL负荷预测",
     page_icon="🦵",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-POS_COLOR = "#9C1A1C"   # Positive SHAP contribution: increases ACL force
-NEG_COLOR = "#48A597"   # Negative SHAP contribution: decreases ACL force
+POS_COLOR = "#9C1A1C"   # 正向 SHAP 贡献：使预测 ACL 负荷升高
+NEG_COLOR = "#48A597"   # 负向 SHAP 贡献：使预测 ACL 负荷降低
 TITLE_COLOR = "#1A5276"
 BUNDLE_FILE = "acl_xgboost_web_bundle.pkl"
 
+# Matplotlib 中文字体回退设置
 matplotlib.rcParams.update({
-    "font.family": "serif",
-    "font.serif": ["Times New Roman", "DejaVu Serif"],
+    "font.family": "sans-serif",
+    "font.sans-serif": [
+        "Microsoft YaHei",
+        "PingFang SC",
+        "Noto Sans CJK SC",
+        "SimHei",
+        "Arial Unicode MS",
+        "DejaVu Sans"
+    ],
     "axes.grid": False,
     "axes.unicode_minus": False
 })
 
 FEATURE_LABELS = {
-    "HFA": "Hip Flexion Angle (HFA)",
-    "HRA": "Hip Rotation Angle (HRA)",
-    "HAA": "Hip Adduction Angle (HAA)",
-    "KFA": "Knee Flexion Angle (KFA)",
-    "ITR": "Internal Tibial Rotation (ITR)",
-    "KVA": "Knee Varus/Valgus Angle (KVA)",
-    "ADF": "Ankle Dorsiflexion Angle (ADF)",
-    "FPA": "Foot Progression Angle (FPA)",
-    "TFA": "Trunk Flexion Angle (TFA)",
-    "H/Q": "Hamstring/Quadriceps Ratio (H/Q)"
+    "HFA": "髋关节屈曲角（HFA）",
+    "HRA": "髋关节旋转角（HRA）",
+    "HAA": "髋关节内收角（HAA）",
+    "KFA": "膝关节屈曲角（KFA）",
+    "ITR": "胫骨内旋角（ITR）",
+    "KVA": "膝关节内/外翻角（KVA）",
+    "ADF": "踝关节背屈角（ADF）",
+    "FPA": "足前进角（FPA）",
+    "TFA": "躯干屈曲角（TFA）",
+    "H/Q": "腘绳肌/股四头肌比值（H/Q）"
 }
 
 FEATURE_UNITS = {
     "HFA": "°", "HRA": "°", "HAA": "°", "KFA": "°", "ITR": "°",
-    "KVA": "°", "ADF": "°", "FPA": "°", "TFA": "°", "H/Q": "ratio"
+    "KVA": "°", "ADF": "°", "FPA": "°", "TFA": "°", "H/Q": "比值"
 }
 
 @st.cache_resource
@@ -55,7 +63,7 @@ def load_assets():
     required = ["pipeline", "model", "feature_names"]
     missing = [k for k in required if k not in bundle]
     if missing:
-        raise KeyError(f"Missing fields in model bundle: {missing}")
+        raise KeyError(f"模型文件缺少必要字段：{missing}")
 
     pipeline = bundle["pipeline"]
     model = bundle["model"]
@@ -76,7 +84,7 @@ def fmt_feature_value(name, value):
 
 
 def make_waterfall_figure(shap_values, feature_values, feature_names, base_value):
-    """Custom SHAP waterfall so colors always match the Force Plot."""
+    """自定义 SHAP 瀑布图，使其配色与 SHAP 力图保持一致。"""
     shap_values = np.asarray(shap_values, dtype=float).reshape(-1)
     feature_values = np.asarray(feature_values, dtype=float).reshape(-1)
 
@@ -137,7 +145,7 @@ def make_waterfall_figure(shap_values, feature_values, feature_names, base_value
                     va="center", fontsize=10.5, color=color, zorder=4)
 
     ylabels = [
-        rf"$\mathit{{{fmt_feature_value(name, value)}}}$ = {name}"
+        f"{fmt_feature_value(name, value)} = {FEATURE_LABELS.get(name, name)}"
         for name, value in zip(names, data)
     ]
     ax.set_yticks(y)
@@ -146,9 +154,9 @@ def make_waterfall_figure(shap_values, feature_values, feature_names, base_value
 
     ax.axvline(base_value, color="#B9BFC3", linestyle="--", linewidth=0.9, zorder=1)
     ax.axvline(prediction, color="#222222", linestyle="--", linewidth=1.0, zorder=1)
-    ax.text(prediction, -0.83, rf"$f(x)$ = {prediction:.3f}", ha="center", va="bottom",
+    ax.text(prediction, -0.83, f"预测值 f(x) = {prediction:.3f}", ha="center", va="bottom",
             fontsize=12.5, fontweight="bold")
-    ax.text(base_value, len(vals) - 0.05, rf"$E[f(X)]$ = {base_value:.3f}", ha="center",
+    ax.text(base_value, len(vals) - 0.05, f"基线值 E[f(X)] = {base_value:.3f}", ha="center",
             va="top", fontsize=11.5, color="#8C8C8C")
 
     ax.set_xlim(x_min - margin, x_max + margin)
@@ -159,6 +167,7 @@ def make_waterfall_figure(shap_values, feature_values, feature_names, base_value
     for spine in ["top", "right", "left"]:
         ax.spines[spine].set_visible(False)
     ax.spines["bottom"].set_linewidth(1.0)
+    ax.set_xlabel("模型输出（ACL 峰值力，BW）", fontsize=11)
     fig.tight_layout()
     return fig
 
@@ -209,6 +218,24 @@ def recolor_force_plot(fig):
                     obj.set_edgecolor(new_c)
             except Exception:
                 pass
+    # 将 SHAP 力图中的固定英文提示替换为中文
+    text_replacements = {
+        "base value": "基线值",
+        "higher": "升高",
+        "lower": "降低",
+        "features": "特征",
+        "feature": "特征",
+        "output value": "输出值"
+    }
+    for text_obj in ax.texts:
+        try:
+            current_text = text_obj.get_text()
+            for en_text, zh_text in text_replacements.items():
+                current_text = current_text.replace(en_text, zh_text)
+            text_obj.set_text(current_text)
+        except Exception:
+            pass
+
     return fig
 
 
@@ -216,36 +243,36 @@ st.markdown("""
 <style>
     .stApp { background-color: #FFFFFF; }
     .block-container { padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1500px; }
-    .sci-title { color:#1A5276; font-family:'Times New Roman',serif; font-size:2.55rem;
+    .sci-title { color:#1A5276; font-family:'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','SimHei',sans-serif; font-size:2.55rem;
                  font-weight:800; text-align:center; margin-bottom:0.15rem; }
-    .sci-subtitle { color:#7F8C8D; font-family:Arial,sans-serif; text-align:center;
+    .sci-subtitle { color:#7F8C8D; font-family:'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','SimHei',sans-serif; text-align:center;
                     font-size:1rem; margin-bottom:1.8rem; }
     .result-card { background-color:#F8F9FA; border:1px solid #EAECEE; border-radius:10px;
                    padding:22px 24px; border-left:6px solid #1A5276; margin-top:10px; margin-bottom:12px; }
     .label-text { color:#2E4053; font-size:0.84rem; text-transform:uppercase; font-weight:bold;
                   letter-spacing:0.08rem; }
     .result-row { display:flex; align-items:baseline; flex-wrap:wrap; gap:24px; margin-top:5px; }
-    .value-text { color:#111111; font-family:'Times New Roman',serif; font-size:3.15rem;
+    .value-text { color:#111111; font-family:'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','SimHei',sans-serif; font-size:3.15rem;
                   font-weight:800; line-height:1.05; }
     .unit-text { color:#666666; font-size:1.35rem; font-weight:600; margin-left:5px; }
-    .status-text { font-family:Arial,sans-serif; font-size:1.45rem; font-weight:800; letter-spacing:0.02rem; }
+    .status-text { font-family:'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','SimHei',sans-serif; font-size:1.45rem; font-weight:800; letter-spacing:0.02rem; }
     .small-note { color:#7F8C8D; font-size:0.83rem; margin-top:9px; line-height:1.45; }
     div[data-testid="stMetric"] { background:#FAFAFA; border:1px solid #ECECEC; padding:12px; border-radius:8px; }
     .stNumberInput { margin-bottom:-0.15rem; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 class='sci-title'>Individual ACL Loading Prediction During Badminton Wide Lunge</h1>",
+st.markdown("<h1 class='sci-title'>羽毛球大跨步个体 ACL 负荷预测</h1>",
             unsafe_allow_html=True)
-st.markdown("<p class='sci-subtitle'>XGBoost-based biomechanical prediction with individual SHAP interpretation</p>",
+st.markdown("<p class='sci-subtitle'>基于 XGBoost 的生物力学个体预测与 SHAP 可解释性分析</p>",
             unsafe_allow_html=True)
 
 try:
     bundle, pipeline, model, explainer, feature_names, processed_feature_names = load_assets()
 except Exception as exc:
     st.error(
-        f"Model bundle could not be loaded: {exc}\n\n"
-        f"Place `{BUNDLE_FILE}` in the same folder as this Streamlit script."
+        f"模型文件加载失败：{exc}\n\n"
+        f"请将 `{BUNDLE_FILE}` 与当前 Streamlit 程序放在同一文件夹中。"
     )
     st.stop()
 
@@ -259,7 +286,7 @@ threshold_percentile = bundle.get("threshold_percentile", 75)
 col_left, col_right = st.columns([0.95, 1.20], gap="large")
 
 with col_left:
-    st.markdown("### 📋 Individual biomechanical inputs")
+    st.markdown("### 📋 个体生物力学参数输入")
 
     with st.form("acl_prediction_form"):
         input_values = {}
@@ -273,7 +300,7 @@ with col_left:
             help_text = None
             if rmin is not None and rmax is not None:
                 help_text = (
-                    f"Training-data range: {float(rmin):.2f} to {float(rmax):.2f} "
+                    f"训练数据范围：{float(rmin):.2f} 至 {float(rmax):.2f} "
                     f"{FEATURE_UNITS.get(name, '')}"
                 )
 
@@ -283,10 +310,10 @@ with col_left:
                     format="%.2f", help=help_text, key=f"input_{name}"
                 )
 
-        submitted = st.form_submit_button("Predict ACL Force", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("预测 ACL 峰值力", type="primary", use_container_width=True)
 
     if not submitted:
-        st.info("Enter the individual biomechanical variables and click **Predict ACL Force**.")
+        st.info("请输入个体生物力学参数，然后点击 **预测 ACL 峰值力**。")
         st.stop()
 
     input_data = pd.DataFrame(
@@ -300,78 +327,17 @@ with col_left:
             low = float(ranges[name].get("min", -np.inf))
             high = float(ranges[name].get("max", np.inf))
             if v < low or v > high:
-                out_of_range.append(f"{name}={v:.2f} (training range {low:.2f}–{high:.2f})")
+                out_of_range.append(f"{FEATURE_LABELS.get(name, name)}={v:.2f}（训练范围 {low:.2f}–{high:.2f}）")
 
     if out_of_range:
         st.warning(
-            "The following values are outside the training-data range. "
-            "The prediction is therefore an extrapolation:\n\n- " + "\n- ".join(out_of_range)
+            "以下输入值超出训练数据范围，当前预测属于外推结果，请谨慎解释：\n\n- " + "\n- ".join(out_of_range)
         )
 
     prediction = float(pipeline.predict(input_data)[0])
 
-    if np.isfinite(threshold):
-        is_high = prediction >= threshold
-        status_label = "HIGH RELATIVE LOAD" if is_high else "WITHIN REFERENCE RANGE"
-        status_color = POS_COLOR if is_high else NEG_COLOR
-        threshold_note = (
-            f"Reference threshold: {threshold:.3f} BW "
-            f"({threshold_percentile}th percentile of the training ACL-force distribution)"
-        )
-    else:
-        status_label = "PREDICTION COMPLETE"
-        status_color = TITLE_COLOR
-        threshold_note = "No high-load reference threshold was stored in the model bundle."
-
-    st.markdown(
-        f"""
-        <div class="result-card">
-            <div class="label-text">Predicted peak ACL force</div>
-            <div class="result-row">
-                <span class="value-text">{prediction:.3f}<span class="unit-text"> BW</span></span>
-                <span class="status-text" style="color:{status_color};">{status_label}</span>
-            </div>
-            <div class="small-note">
-                {threshold_note}<br>
-                SHAP baseline E[f(X)]: {baseline:.3f} BW
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Test R²", f"{metrics.get('r2', np.nan):.3f}" if "r2" in metrics else "—")
-    m2.metric("Test RMSE", f"{metrics.get('rmse', np.nan):.3f} BW" if "rmse" in metrics else "—")
-    m3.metric("Test MAE", f"{metrics.get('mae', np.nan):.3f} BW" if "mae" in metrics else "—")
-
-    with st.expander("ℹ️ Model and interpretation notes"):
-        st.markdown(
-            """
-            - **Algorithm:** XGBoost regression.
-            - **Output:** predicted peak ACL force normalized to body weight (BW).
-            - **Positive SHAP contribution:** increases the predicted ACL force.
-            - **Negative SHAP contribution:** decreases the predicted ACL force.
-            - The relative-load label is a **research reference classification**, not a clinical diagnosis.
-            """
-        )
-
-    report = input_data.copy()
-    report["Predicted_ACL_Force_BW"] = prediction
-    report["Reference_Status"] = status_label
-    if np.isfinite(threshold):
-        report["Reference_Threshold_BW"] = threshold
-
-    st.download_button(
-        "📥 Export individual prediction (CSV)",
-        data=report.to_csv(index=False).encode("utf-8-sig"),
-        file_name="individual_acl_prediction.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-
 with col_right:
-    st.markdown("### 🔍 Individual model interpretation")
+    st.markdown("### 🔍 个体模型解释")
 
     preprocessor = Pipeline(pipeline.steps[:-1])
     transformed = preprocessor.transform(input_data)
@@ -384,42 +350,45 @@ with col_right:
         shap_row = np.asarray(explainer.shap_values(processed_input))[0]
 
     current_base = scalar_base_value(explainer.expected_value)
-    tab1, tab2 = st.tabs(["Waterfall plot", "Force plot"])
 
-    with tab1:
-        wf_fig = make_waterfall_figure(
-            shap_values=shap_row,
-            feature_values=processed_input.iloc[0].values,
-            feature_names=processed_feature_names,
-            base_value=current_base
-        )
-        st.pyplot(wf_fig, clear_figure=True, use_container_width=True)
-        st.caption(
-            "Waterfall plot: deep red indicates contributions that increase predicted ACL force; "
-            "teal indicates contributions that decrease predicted ACL force."
-        )
+    # ========================================================
+    # 瀑布图与力图在同一页面显示
+    # ========================================================
+    st.markdown("#### SHAP 瀑布图")
+    wf_fig = make_waterfall_figure(
+        shap_values=shap_row,
+        feature_values=processed_input.iloc[0].values,
+        feature_names=processed_feature_names,
+        base_value=current_base
+    )
+    st.pyplot(wf_fig, clear_figure=True, use_container_width=True)
+    st.caption(
+        "瀑布图：深红色表示该特征使预测 ACL 负荷升高，青绿色表示该特征使预测 ACL 负荷降低。"
+    )
 
-    with tab2:
-        force_features = processed_input.iloc[0].round(3)
-        shap_fig = shap.force_plot(
-            current_base, shap_row, force_features,
-            matplotlib=True, show=False
-        )
-        force_fig = shap_fig if shap_fig is not None else plt.gcf()
-        force_fig.set_size_inches(13, 3.2)
-        force_fig = recolor_force_plot(force_fig)
-        st.pyplot(force_fig, clear_figure=True, use_container_width=True)
-        st.caption(
-            "Force plot: the prediction is decomposed from the SHAP baseline into positive "
-            "and negative feature contributions."
-        )
+    st.markdown("#### SHAP 力图")
+    force_features = pd.Series(
+        processed_input.iloc[0].round(3).values,
+        index=[FEATURE_LABELS.get(name, name) for name in processed_feature_names]
+    )
+    shap_fig = shap.force_plot(
+        current_base, shap_row, force_features,
+        matplotlib=True, show=False
+    )
+    force_fig = shap_fig if shap_fig is not None else plt.gcf()
+    force_fig.set_size_inches(13, 3.2)
+    force_fig = recolor_force_plot(force_fig)
+    st.pyplot(force_fig, clear_figure=True, use_container_width=True)
+    st.caption(
+        "力图：以 SHAP 基线值为起点，将个体预测结果分解为各特征的正向贡献和负向贡献。"
+    )
 
 st.markdown(
     """
     <br><hr>
-    <div style="color:#95A5A6; font-size:0.78rem; font-family:'Times New Roman', serif;">
-        Research-use prototype for biomechanical ACL-loading prediction. 
-        Predictions outside the training-data range should be interpreted cautiously.
+    <div style="color:#95A5A6; font-size:0.78rem; font-family:'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','SimHei',sans-serif;">
+        本网页为 ACL 生物力学负荷预测的科研原型工具，仅用于研究用途。<br>
+        超出训练数据范围的预测结果属于外推，应谨慎解释。
     </div>
     """,
     unsafe_allow_html=True
